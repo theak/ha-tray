@@ -20,4 +20,12 @@ final class HAURLsTests: XCTestCase {
     func testNormalizedPath() {
         XCTAssertEqual(HAURLs.normalizedPath("/lovelace/bedroom/"), "lovelace/bedroom")
     }
+
+    func testIsShowingMatchesExactAndRedirectedSubpath() {
+        XCTAssertTrue(HAURLs.isShowing(currentPath: "lovelace/bedroom", target: "/lovelace/bedroom"))
+        XCTAssertTrue(HAURLs.isShowing(currentPath: "dashboard-cameras/0", target: "dashboard-cameras"))
+        XCTAssertFalse(HAURLs.isShowing(currentPath: "lovelace-music/0", target: "lovelace"))
+        XCTAssertFalse(HAURLs.isShowing(currentPath: "lovelace/30", target: "lovelace/3"))
+        XCTAssertFalse(HAURLs.isShowing(currentPath: nil, target: "lovelace/0"))
+    }
 }

@@ -8,6 +8,7 @@ final class PanelController {
     private let web: HAWebView
     private var loadedBase: URL?
     private var escapeMonitor: Any?
+    private var isOpening = false
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -28,13 +29,26 @@ final class PanelController {
         isShown ? close() : show(relativeTo: button)
     }
 
+    /// Picks the dashboard from the rules (bounded by the fetch timeout), then shows the popover.
     func show(relativeTo button: NSStatusBarButton) {
-        guard let base = settings.baseURL else { return }
-        if loadedBase != base || web.webView.url == nil {
-            loadedBase = base
-            web.load(HAURLs.dashboard(base: base, path: settings.defaultDashboardPath))
+        guard let base = settings.baseURL, !isOpening else { return }
+        isOpening = true
+        let rules = settings.rules
+        let defaultPath = settings.defaultDashboardPath
+        let client = HAClient(baseURL: base, token: settings.token)
+        Task { @MainActor in
+            let fetch = await client.fetchStates(Array(Set(rules.map(\.entityID))))
+            var target = RuleEvaluator.target(rules: rules, fetch: fetch, defaultPath: defaultPath)
+            if loadedBase != base || web.webView.url == nil {
+                loadedBase = base
+                target = target ?? defaultPath
+            } else if let t = target, HAURLs.isShowing(currentPath: web.currentPath, target: t) {
+                target = nil
+            }
+            if let target { web.load(HAURLs.dashboard(base: base, path: target)) }
+            isOpening = false
+            present(relativeTo: button)
         }
-        present(relativeTo: button)
     }
 
     private func present(relativeTo button: NSStatusBarButton) {

@@ -5,6 +5,13 @@ public enum HAURLs {
         path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
+    /// Whether `currentPath` shows `target`, allowing for HA redirecting a dashboard to one of its views.
+    public static func isShowing(currentPath: String?, target: String) -> Bool {
+        guard let current = currentPath.map(normalizedPath) else { return false }
+        let target = normalizedPath(target)
+        return current == target || current.hasPrefix(target + "/")
+    }
+
     public static func dashboard(base: URL, path: String) -> URL {
         join(base, normalizedPath(path))
     }
