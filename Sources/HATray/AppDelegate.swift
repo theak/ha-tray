@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow = SettingsWindowController(settings: settings)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "house", accessibilityDescription: "Home Assistant")
+            button.image = NSImage(systemSymbolName: "house.fill", accessibilityDescription: "Home Assistant")
             button.target = self
             button.action = #selector(statusItemClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
