@@ -7,6 +7,9 @@ final class HAWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate, W
     let webView: WKWebView
     private let tokenProvider: () -> String?
     private let baseURLProvider: () -> URL?
+    private var tokenRequests = TokenRequestLimiter()
+    /// Called when the page keeps asking for the token, i.e. HA is rejecting it.
+    var onTokenRejected: (() -> Void)?
 
     /// Runs before HA's frontend boots so it reads the sidebar preference on startup.
     private static let hideSidebarScript = #"localStorage.setItem("dockedSidebar", JSON.stringify("always_hidden"));"#
@@ -29,7 +32,13 @@ final class HAWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate, W
     }
 
     func load(_ url: URL) {
+        tokenRequests.reset()
         webView.load(URLRequest(url: url))
+    }
+
+    /// Unloads the dashboard so nothing keeps talking to HA.
+    func unload() {
+        webView.load(URLRequest(url: URL(string: "about:blank")!))
     }
 
     /// Normalized path of the page currently loaded, e.g. `lovelace/0`.
@@ -46,6 +55,11 @@ final class HAWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate, W
 
         switch message.name {
         case "getExternalAuth":
+            guard tokenRequests.allow() else {
+                webView.evaluateJavaScript("window.\(callback)(false);")
+                onTokenRejected?()
+                return
+            }
             guard let token = tokenProvider(), !token.isEmpty,
                   let json = try? JSONSerialization.data(withJSONObject: ["access_token": token, "expires_in": 1800]),
                   let payload = String(data: json, encoding: .utf8)

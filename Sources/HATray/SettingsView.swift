@@ -6,6 +6,8 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
     @State private var connectionStatus: String?
+    @State private var tokenDraft = ""
+    @State private var isTesting = false
     @State private var entities: [String] = []
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
@@ -16,10 +18,21 @@ struct SettingsView: View {
         Form {
             Section("Connection") {
                 TextField("Home Assistant URL", text: $settings.baseURLString, prompt: Text("http://homeassistant.local:8123"))
-                SecureField("Long-lived access token", text: $settings.token)
+                SecureField("Long-lived access token", text: $tokenDraft,
+                            prompt: Text(settings.token.isEmpty ? "Paste token" : "Saved — paste to replace"))
+                if let tokenError = settings.tokenError {
+                    Text(tokenError).foregroundStyle(.red)
+                }
+                if settings.authFailed {
+                    Text("Home Assistant rejected the saved token, so HA Tray has stopped contacting it. Save a new token or retry.")
+                        .foregroundStyle(.red)
+                }
                 HStack {
-                    Button("Test Connection") { testConnection() }
-                        .disabled(!settings.isConfigured)
+                    Button("Save & Test Token") { saveToken() }
+                        .disabled(isTesting || settings.baseURL == nil
+                                  || tokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(settings.authFailed ? "Retry" : "Test Connection") { testSavedToken() }
+                        .disabled(isTesting || !settings.isConfigured)
                     if let connectionStatus { Text(connectionStatus).foregroundStyle(.secondary) }
                 }
             }
@@ -57,26 +70,56 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 600, height: 680)
-        .task(id: settings.isConfigured) { await loadEntities() }
+        .task(id: settings.canConnect) { await loadEntities() }
     }
 
-    private func client() -> HAClient? {
-        settings.baseURL.map { HAClient(baseURL: $0, token: settings.effectiveToken) }
+    private func client(token: String? = nil) -> HAClient? {
+        settings.baseURL.map { HAClient(baseURL: $0, token: token ?? settings.effectiveToken) }
     }
 
-    private func testConnection() {
-        guard let client = client() else { return }
+    /// Validates the pasted token with one request; saves it only if HA accepts it.
+    private func saveToken() {
+        let candidate = tokenDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let client = client(token: candidate) else { return }
+        isTesting = true
         connectionStatus = "Testing…"
         Task {
+            defer { isTesting = false }
+            if let error = await client.testConnection() {
+                connectionStatus = "✗ \(error.localizedDescription) — not saved"
+                return
+            }
+            do {
+                try settings.applyToken(candidate)
+                tokenDraft = ""
+                connectionStatus = "✓ Saved"
+            } catch {
+                connectionStatus = "✗ \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// One request with the saved token; clears or sets the auth-failure stop.
+    private func testSavedToken() {
+        guard let client = client() else { return }
+        isTesting = true
+        connectionStatus = "Testing…"
+        Task {
+            defer { isTesting = false }
             let error = await client.testConnection()
+            if error == .unauthorized { settings.authFailed = true }
+            if error == nil { settings.authFailed = false }
             connectionStatus = error.map { "✗ \($0.localizedDescription)" } ?? "✓ Connected"
-            if error == nil { await loadEntities() }
         }
     }
 
     private func loadEntities() async {
-        guard settings.isConfigured, let client = client() else { return }
-        entities = (try? await client.allEntities(domains: Self.ruleDomains)) ?? entities
+        guard settings.canConnect, let client = client() else { return }
+        do {
+            entities = try await client.allEntities(domains: Self.ruleDomains)
+        } catch HAError.unauthorized {
+            settings.authFailed = true
+        } catch {}
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

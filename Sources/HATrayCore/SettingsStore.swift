@@ -6,11 +6,12 @@ public final class SettingsStore: ObservableObject {
     private let tokens: TokenStore
 
     @Published public var baseURLString: String { didSet { defaults.set(baseURLString, forKey: "baseURLString") } }
-    @Published public var token: String {
-        didSet {
-            if effectiveToken.isEmpty { tokens.delete() } else { try? tokens.save(effectiveToken) }
-        }
-    }
+    /// The saved token. Change it only through `applyToken` after validating it with HA.
+    @Published public private(set) var token: String
+    /// The last keychain read failure, for display in Settings.
+    @Published public private(set) var tokenError: String?
+    /// HA rejected the token. No requests are made until a new token is applied or a retry succeeds.
+    @Published public var authFailed: Bool { didSet { defaults.set(authFailed, forKey: "authFailed") } }
     @Published public var defaultDashboardPath: String { didSet { defaults.set(defaultDashboardPath, forKey: "defaultDashboardPath") } }
     @Published public var rules: [DashboardRule] { didSet { defaults.set(try? JSONEncoder().encode(rules), forKey: "rules") } }
     @Published public var panelWidth: Double { didSet { defaults.set(panelWidth, forKey: "panelWidth") } }
@@ -20,7 +21,13 @@ public final class SettingsStore: ObservableObject {
         self.defaults = defaults
         self.tokens = tokens
         baseURLString = defaults.string(forKey: "baseURLString") ?? ""
-        token = tokens.load() ?? ""
+        do {
+            token = try tokens.load() ?? ""
+        } catch {
+            token = ""
+            tokenError = error.localizedDescription
+        }
+        authFailed = defaults.bool(forKey: "authFailed")
         defaultDashboardPath = defaults.string(forKey: "defaultDashboardPath") ?? "lovelace/0"
         rules = defaults.data(forKey: "rules").flatMap { try? JSONDecoder().decode([DashboardRule].self, from: $0) } ?? []
         panelWidth = defaults.object(forKey: "panelWidth") as? Double ?? 420
@@ -43,4 +50,17 @@ public final class SettingsStore: ObservableObject {
     }
 
     public var isConfigured: Bool { baseURL != nil && !effectiveToken.isEmpty }
+
+    /// Whether requests to HA may be made right now.
+    public var canConnect: Bool { isConfigured && !authFailed }
+
+    /// Saves a token the caller has already validated against HA, and clears any auth failure.
+    public func applyToken(_ candidate: String) throws {
+        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HAError.unauthorized }
+        try tokens.save(trimmed)
+        token = trimmed
+        tokenError = nil
+        authFailed = false
+    }
 }

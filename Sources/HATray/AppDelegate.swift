@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import HATrayCore
 import KeyboardShortcuts
 
@@ -7,13 +8,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var panel: PanelController!
     private var settingsWindow: SettingsWindowController!
+    private var authObserver: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         panel = PanelController(settings: settings)
         settingsWindow = SettingsWindowController(settings: settings)
+        panel.onNeedsSettings = { [weak self] in self?.settingsWindow.show() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "house.fill", accessibilityDescription: "Home Assistant")
+            authObserver = settings.$authFailed.sink { failed in
+                button.image = NSImage(
+                    systemSymbolName: failed ? "exclamationmark.triangle.fill" : "house.fill",
+                    accessibilityDescription: failed ? "Home Assistant: authentication failed" : "Home Assistant")
+            }
             button.target = self
             button.action = #selector(statusItemClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -35,16 +42,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let event = NSApp.currentEvent,
            event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
             showMenu()
-        } else if settings.isConfigured {
-            panel.toggle(relativeTo: button)
         } else {
-            settingsWindow.show()
+            panel.toggle(relativeTo: button)
         }
     }
 
     private func showMenu() {
         panel.close()
         let menu = NSMenu()
+        if settings.authFailed {
+            menu.addItem(withTitle: "Authentication failed — check token", action: nil, keyEquivalent: "")
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: "Open in Browser", action: #selector(openInBrowser), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "").target = self
         menu.addItem(.separator())

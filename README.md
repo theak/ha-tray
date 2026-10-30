@@ -19,7 +19,9 @@ make test      # unit tests (a read-only live test runs when HA_URL/HA_TOKEN are
 
 ## Setup
 
-On first launch the Settings window opens. Enter your HA URL (e.g. `http://homeassistant.local:8123`) and a long-lived access token (HA → Profile → Security → Long-lived access tokens), then **Test Connection**.
+On first launch the Settings window opens. Enter your HA URL (e.g. `http://homeassistant.local:8123`), paste a long-lived access token (HA → Profile → Security → Long-lived access tokens), and click **Save & Test Token**. The token is checked with a single request and saved to the Keychain only if HA accepts it.
+
+If HA ever rejects the saved token (401/403), HA Tray stops contacting HA entirely — the menu bar icon turns into a warning triangle — so repeated failures can't trip HA's IP ban. Save a new token or click **Retry** (one request) to resume.
 
 Right-click the menu bar icon for Open in Browser, Reload, Settings…, and Quit.
 

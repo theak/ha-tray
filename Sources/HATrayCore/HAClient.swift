@@ -7,7 +7,7 @@ public enum HAError: Error, Equatable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .unauthorized: "Unauthorized (401)"
+        case .unauthorized: "Authentication failed — check the token"
         case .http(let code): "HTTP \(code)"
         case .network(let message): message
         }
@@ -31,48 +31,30 @@ public struct HAClient: Sendable {
         let state: String
     }
 
-    private enum Outcome {
-        case state(String, String)
-        case notFound
-        case error
-    }
-
-    /// Fetches the given entities concurrently. Missing entities are omitted; the
-    /// result is `.failed` on timeout or when every request fails for another reason.
+    /// Fetches all states in a single request and picks out `entityIDs`. Always makes
+    /// exactly one request, so it doubles as the auth check before loading the dashboard.
     public func fetchStates(_ entityIDs: [String], timeout: TimeInterval = 1.5) async -> StateFetchResult {
-        guard !entityIDs.isEmpty else { return .states([:]) }
-        return await withTaskGroup(of: [Outcome]?.self) { group in
-            group.addTask {
-                await withTaskGroup(of: Outcome.self) { inner in
-                    for id in Set(entityIDs) { inner.addTask { await fetchState(id) } }
-                    return await inner.reduce(into: []) { $0.append($1) }
-                }
-            }
+        await withTaskGroup(of: StateFetchResult?.self) { group in
+            group.addTask { await fetchAllStates(keeping: Set(entityIDs)) }
             group.addTask {
                 try? await Task.sleep(for: .seconds(timeout))
                 return nil
             }
             let first = await group.next() ?? nil
             group.cancelAll()
-            guard let outcomes = first else { return .failed }
-            var states: [String: String] = [:]
-            var anySucceeded = false
-            for outcome in outcomes {
-                switch outcome {
-                case .state(let id, let state): states[id] = state; anySucceeded = true
-                case .notFound: anySucceeded = true
-                case .error: break
-                }
-            }
-            return anySucceeded ? .states(states) : .failed
+            return first ?? .failed
         }
     }
 
-    private func fetchState(_ entityID: String) async -> Outcome {
-        guard let (data, status) = try? await get("states/\(entityID)") else { return .error }
-        if status == 404 { return .notFound }
-        guard status == 200, let s = try? JSONDecoder().decode(EntityState.self, from: data) else { return .error }
-        return .state(s.entity_id, s.state)
+    private func fetchAllStates(keeping wanted: Set<String>) async -> StateFetchResult {
+        guard let (data, status) = try? await get("states") else { return .failed }
+        if status == 401 || status == 403 { return .unauthorized }
+        guard status == 200, let all = try? JSONDecoder().decode([EntityState].self, from: data) else { return .failed }
+        var states: [String: String] = [:]
+        for entity in all where wanted.contains(entity.entity_id) {
+            states[entity.entity_id] = entity.state
+        }
+        return .states(states)
     }
 
     /// `nil` on success.
@@ -81,7 +63,7 @@ public struct HAClient: Sendable {
             let (_, status) = try await get("")
             switch status {
             case 200: return nil
-            case 401: return .unauthorized
+            case 401, 403: return .unauthorized
             default: return .http(status)
             }
         } catch {
@@ -92,7 +74,7 @@ public struct HAClient: Sendable {
     /// Sorted entity IDs whose domain is in `domains`.
     public func allEntities(domains: Set<String>) async throws -> [String] {
         let (data, status) = try await get("states")
-        guard status == 200 else { throw status == 401 ? HAError.unauthorized : HAError.http(status) }
+        guard status == 200 else { throw status == 401 || status == 403 ? HAError.unauthorized : HAError.http(status) }
         return try JSONDecoder().decode([EntityState].self, from: data)
             .map(\.entity_id)
             .filter { domains.contains(String($0.prefix { $0 != "." })) }

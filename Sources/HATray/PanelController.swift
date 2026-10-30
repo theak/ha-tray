@@ -10,12 +10,15 @@ final class PanelController: NSObject, NSPopoverDelegate {
     private var escapeMonitor: Any?
     private var isOpening = false
     private var lastClosed = Date.distantPast
+    /// Called when the panel can't be used (not set up, or HA rejected the token).
+    var onNeedsSettings: (() -> Void)?
 
     init(settings: SettingsStore) {
         self.settings = settings
-        web = HAWebView(tokenProvider: { [settings] in settings.effectiveToken },
+        web = HAWebView(tokenProvider: { [settings] in settings.authFailed ? nil : settings.effectiveToken },
                         baseURLProvider: { [settings] in settings.baseURL })
         super.init()
+        web.onTokenRejected = { [weak self] in self?.authenticationFailed() }
         popover.behavior = .transient
         popover.delegate = self
         let controller = NSViewController()
@@ -41,13 +44,22 @@ final class PanelController: NSObject, NSPopoverDelegate {
 
     /// Picks the dashboard from the rules (bounded by the fetch timeout), then shows the popover.
     func show(relativeTo button: NSStatusBarButton) {
-        guard let base = settings.baseURL, !isOpening else { return }
+        guard !isOpening else { return }
+        guard settings.canConnect, let base = settings.baseURL else {
+            onNeedsSettings?()
+            return
+        }
         isOpening = true
         let rules = settings.rules
         let defaultPath = settings.defaultDashboardPath
         let client = HAClient(baseURL: base, token: settings.effectiveToken)
         Task { @MainActor in
             let fetch = await client.fetchStates(Array(Set(RuleEvaluator.activeRules(rules).map(\.entityID))))
+            if fetch == .unauthorized {
+                isOpening = false
+                authenticationFailed()
+                return
+            }
             var target = RuleEvaluator.target(rules: rules, fetch: fetch, defaultPath: defaultPath)
             if loadedBase != base || web.webView.url == nil {
                 loadedBase = base
@@ -89,6 +101,16 @@ final class PanelController: NSObject, NSPopoverDelegate {
     }
 
     func reload() {
+        guard settings.canConnect else { return onNeedsSettings?() ?? () }
         web.webView.reload()
+    }
+
+    /// Stops all traffic to HA until the user fixes or retries the token.
+    private func authenticationFailed() {
+        settings.authFailed = true
+        close()
+        web.unload()
+        loadedBase = nil
+        onNeedsSettings?()
     }
 }

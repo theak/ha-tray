@@ -13,9 +13,11 @@ public struct DashboardRule: Codable, Identifiable, Equatable {
     }
 }
 
-/// Entity states keyed by entity ID. Entities that failed individually are absent.
+/// Entity states keyed by entity ID; requested entities HA doesn't have are absent.
 public enum StateFetchResult: Equatable {
     case states([String: String])
+    /// HA rejected the token (401/403). Callers must stop making requests.
+    case unauthorized
     case failed
 }
 
@@ -32,9 +34,8 @@ public enum RuleEvaluator {
     }
 
     public static func target(rules: [DashboardRule], fetch: StateFetchResult, defaultPath: String) -> String? {
-        let rules = activeRules(rules)
-        guard !rules.isEmpty else { return defaultPath }
         guard case .states(let states) = fetch else { return nil }
+        let rules = activeRules(rules)
         return rules.first { states[$0.entityID] == "on" }?.dashboardPath ?? defaultPath
     }
 }
