@@ -28,4 +28,13 @@ final class HAURLsTests: XCTestCase {
         XCTAssertFalse(HAURLs.isShowing(currentPath: "lovelace/30", target: "lovelace/3"))
         XCTAssertFalse(HAURLs.isShowing(currentPath: nil, target: "lovelace/0"))
     }
+
+    func testIsSameOrigin() {
+        let base = URL(string: "http://homeassistant.local:8123")!
+        XCTAssertTrue(HAURLs.isSameOrigin(URL(string: "http://homeassistant.local:8123/lovelace/0"), as: base))
+        XCTAssertFalse(HAURLs.isSameOrigin(URL(string: "https://evil.example/x"), as: base))
+        XCTAssertFalse(HAURLs.isSameOrigin(URL(string: "http://homeassistant.local:8124/"), as: base))
+        XCTAssertFalse(HAURLs.isSameOrigin(URL(string: "https://homeassistant.local:8123/"), as: base))
+        XCTAssertFalse(HAURLs.isSameOrigin(nil, as: base))
+    }
 }

@@ -44,4 +44,16 @@ final class RulesTests: XCTestCase {
     func testNoRulesReturnsDefaultWithoutFetchFailureMattering() {
         XCTAssertEqual(target(.failed, rules: []), "lovelace/0")
     }
+
+    func testBlankRulesAreIgnored() {
+        let rules = [DashboardRule(entityID: "", dashboardPath: ""), DashboardRule(entityID: " ", dashboardPath: "lovelace/x")]
+        XCTAssertEqual(RuleEvaluator.activeRules(rules), [])
+        XCTAssertEqual(target(.failed, rules: rules), "lovelace/0")
+    }
+
+    func testEntityIDIsTrimmed() {
+        let rules = [DashboardRule(entityID: " input_boolean.a\n", dashboardPath: " lovelace/bedroom ")]
+        XCTAssertEqual(RuleEvaluator.activeRules(rules).map(\.entityID), ["input_boolean.a"])
+        XCTAssertEqual(target(.states(["input_boolean.a": "on"]), rules: rules), "lovelace/bedroom")
+    }
 }

@@ -64,4 +64,17 @@ final class SettingsStoreTests: XCTestCase {
         s.token = ""
         XCTAssertNil(tokens.token)
     }
+
+    func testTokenIsTrimmedWhenSaved() {
+        let s = makeStore()
+        s.token = "secret\n"
+        XCTAssertEqual(tokens.token, "secret")
+        XCTAssertEqual(s.effectiveToken, "secret")
+    }
+
+    func testBaseURLKeepsOnlySchemeHostPort() {
+        let s = makeStore()
+        s.baseURLString = "http://ha:8123/lovelace/0?x=1\n"
+        XCTAssertEqual(s.baseURL?.absoluteString, "http://ha:8123")
+    }
 }

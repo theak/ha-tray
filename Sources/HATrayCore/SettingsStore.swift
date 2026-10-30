@@ -8,7 +8,7 @@ public final class SettingsStore: ObservableObject {
     @Published public var baseURLString: String { didSet { defaults.set(baseURLString, forKey: "baseURLString") } }
     @Published public var token: String {
         didSet {
-            if token.isEmpty { tokens.delete() } else { try? tokens.save(token) }
+            if effectiveToken.isEmpty { tokens.delete() } else { try? tokens.save(effectiveToken) }
         }
     }
     @Published public var defaultDashboardPath: String { didSet { defaults.set(defaultDashboardPath, forKey: "defaultDashboardPath") } }
@@ -27,12 +27,20 @@ public final class SettingsStore: ObservableObject {
         panelHeight = defaults.object(forKey: "panelHeight") as? Double ?? 700
     }
 
-    /// `nil` unless the string is an http(s) URL with a host.
+    /// The token with any pasted whitespace removed.
+    public var effectiveToken: String { token.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Scheme, host and port of the entered URL; `nil` unless it is http(s) with a host.
     public var baseURL: URL? {
-        let trimmed = baseURLString.trimmingCharacters(in: .whitespaces)
-        guard let url = URL(string: trimmed), ["http", "https"].contains(url.scheme), url.host != nil else { return nil }
-        return url
+        let trimmed = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = URLComponents(string: trimmed), ["http", "https"].contains(parsed.scheme),
+              let host = parsed.host, !host.isEmpty else { return nil }
+        var origin = URLComponents()
+        origin.scheme = parsed.scheme
+        origin.host = host
+        origin.port = parsed.port
+        return origin.url
     }
 
-    public var isConfigured: Bool { baseURL != nil && !token.isEmpty }
+    public var isConfigured: Bool { baseURL != nil && !effectiveToken.isEmpty }
 }

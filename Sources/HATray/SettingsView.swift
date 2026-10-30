@@ -51,8 +51,7 @@ struct SettingsView: View {
 
             Section("General") {
                 KeyboardShortcuts.Recorder("Toggle panel:", name: .togglePanel)
-                Toggle("Launch at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
+                Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: setLaunchAtLogin))
                 if let launchAtLoginError { Text(launchAtLoginError).foregroundStyle(.red) }
             }
         }
@@ -62,7 +61,7 @@ struct SettingsView: View {
     }
 
     private func client() -> HAClient? {
-        settings.baseURL.map { HAClient(baseURL: $0, token: settings.token) }
+        settings.baseURL.map { HAClient(baseURL: $0, token: settings.effectiveToken) }
     }
 
     private func testConnection() {
@@ -81,13 +80,18 @@ struct SettingsView: View {
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
+        let service = SMAppService.mainApp
         do {
-            if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            if enabled { try service.register() } else { try service.unregister() }
             launchAtLoginError = nil
         } catch {
             launchAtLoginError = error.localizedDescription
         }
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        if service.status == .requiresApproval {
+            launchAtLoginError = "Approve HA Tray in System Settings → Login Items."
+            SMAppService.openSystemSettingsLoginItems()
+        }
+        launchAtLogin = service.status == .enabled
     }
 }
 

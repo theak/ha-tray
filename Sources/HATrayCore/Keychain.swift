@@ -28,7 +28,11 @@ public struct KeychainTokenStore: TokenStore {
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        let status = SecItemCopyMatching(q as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else {
+            if status != errSecItemNotFound { NSLog("HA Tray: keychain read failed (OSStatus %d)", status) }
+            return nil
+        }
         return String(data: data, encoding: .utf8)
     }
 

@@ -12,6 +12,16 @@ public enum HAURLs {
         return current == target || current.hasPrefix(target + "/")
     }
 
+    /// Whether `url` has the same scheme, host and port as `base`.
+    public static func isSameOrigin(_ url: URL?, as base: URL) -> Bool {
+        guard let url else { return false }
+        return url.scheme == base.scheme && url.host == base.host && effectivePort(url) == effectivePort(base)
+    }
+
+    private static func effectivePort(_ url: URL) -> Int? {
+        url.port ?? (url.scheme == "https" ? 443 : url.scheme == "http" ? 80 : nil)
+    }
+
     public static func dashboard(base: URL, path: String) -> URL {
         join(base, normalizedPath(path))
     }

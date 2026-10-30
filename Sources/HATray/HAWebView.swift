@@ -2,22 +2,26 @@ import HATrayCore
 import WebKit
 
 /// A web view that logs into Home Assistant via the frontend's external-auth
-/// protocol and starts with the sidebar hidden.
-final class HAWebView: NSObject, WKScriptMessageHandler {
+/// protocol and starts with the sidebar hidden. Links that leave HA open in the browser.
+final class HAWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     let webView: WKWebView
     private let tokenProvider: () -> String?
+    private let baseURLProvider: () -> URL?
 
     /// Runs before HA's frontend boots so it reads the sidebar preference on startup.
     private static let hideSidebarScript = #"localStorage.setItem("dockedSidebar", JSON.stringify("always_hidden"));"#
 
-    init(tokenProvider: @escaping () -> String?) {
+    init(tokenProvider: @escaping () -> String?, baseURLProvider: @escaping () -> URL?) {
         self.tokenProvider = tokenProvider
+        self.baseURLProvider = baseURLProvider
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.userContentController.addUserScript(
             WKUserScript(source: Self.hideSidebarScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
+        webView.navigationDelegate = self
+        webView.uiDelegate = self
         // The frontend switches to external auth when this handler exists.
         let handler = WeakScriptMessageHandler(self)
         config.userContentController.add(handler, name: "getExternalAuth")
@@ -36,7 +40,8 @@ final class HAWebView: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any],
               let callback = body["callback"] as? String,
-              callback.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" })
+              callback.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }),
+              isTrustedFrame(message.frameInfo)
         else { return }
 
         switch message.name {
@@ -54,6 +59,36 @@ final class HAWebView: NSObject, WKScriptMessageHandler {
         default:
             break
         }
+    }
+}
+
+extension HAWebView {
+    /// Only HA's own top-level page may ask for the token.
+    private func isTrustedFrame(_ frame: WKFrameInfo) -> Bool {
+        guard frame.isMainFrame, let base = baseURLProvider() else { return false }
+        let origin = frame.securityOrigin
+        var components = URLComponents()
+        components.scheme = origin.protocol
+        components.host = origin.host
+        components.port = origin.port == 0 ? nil : origin.port
+        return HAURLs.isSameOrigin(components.url, as: base)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard action.targetFrame?.isMainFrame != false,
+              let url = action.request.url, ["http", "https"].contains(url.scheme),
+              let base = baseURLProvider(), !HAURLs.isSameOrigin(url, as: base)
+        else { return decisionHandler(.allow) }
+        NSWorkspace.shared.open(url)
+        decisionHandler(.cancel)
+    }
+
+    /// `target="_blank"` links and `window.open`: hand off to the browser.
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = action.request.url { NSWorkspace.shared.open(url) }
+        return nil
     }
 }
 
