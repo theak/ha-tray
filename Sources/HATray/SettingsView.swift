@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var connectionStatus: String?
     @State private var tokenDraft = ""
     @State private var isTesting = false
+    /// A pasted token HA already rejected; not re-sent, since each rejection counts toward HA's IP ban.
+    @State private var rejectedDraft: String?
     @State private var entities: [String] = []
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
@@ -30,7 +32,8 @@ struct SettingsView: View {
                 HStack {
                     Button("Save & Test Token") { saveToken() }
                         .disabled(isTesting || settings.baseURL == nil
-                                  || tokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                  || tokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                  || tokenDraft == rejectedDraft)
                     Button(settings.authFailed ? "Retry" : "Test Connection") { testSavedToken() }
                         .disabled(isTesting || !settings.isConfigured)
                     if let connectionStatus { Text(connectionStatus).foregroundStyle(.secondary) }
@@ -86,6 +89,7 @@ struct SettingsView: View {
         Task {
             defer { isTesting = false }
             if let error = await client.testConnection() {
+                if error == .unauthorized { rejectedDraft = tokenDraft }
                 connectionStatus = "✗ \(error.localizedDescription) — not saved"
                 return
             }
