@@ -1,19 +1,29 @@
 import AppKit
 import HATrayCore
+import KeyboardShortcuts
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsStore()
     private var statusItem: NSStatusItem!
     private var panel: PanelController!
+    private var settingsWindow: SettingsWindowController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         panel = PanelController(settings: settings)
+        settingsWindow = SettingsWindowController(settings: settings)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "house", accessibilityDescription: "Home Assistant")
             button.target = self
             button.action = #selector(statusItemClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+        KeyboardShortcuts.onKeyUp(for: .togglePanel) { [weak self] in
+            guard let self, let button = self.statusItem.button else { return }
+            self.panel.toggle(relativeTo: button)
+        }
+        if !settings.isConfigured || CommandLine.arguments.contains("--show-settings") {
+            settingsWindow.show()
         }
         if CommandLine.arguments.contains("--show-panel") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.statusItemClicked() }
@@ -25,8 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let event = NSApp.currentEvent,
            event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
             showMenu()
-        } else {
+        } else if settings.isConfigured {
             panel.toggle(relativeTo: button)
+        } else {
+            settingsWindow.show()
         }
     }
 
@@ -55,6 +67,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        // Settings window arrives in the next task.
+        settingsWindow.show()
     }
 }

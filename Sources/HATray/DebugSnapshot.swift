@@ -10,6 +10,15 @@ enum DebugSnapshot {
         return URL(fileURLWithPath: args[i + 1])
     }
 
+    static func schedule(_ view: NSView, name: String, after delay: TimeInterval) {
+        guard let dir = directory else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent(name))
+        }
+    }
+
     static func schedule(_ webView: WKWebView, after delay: TimeInterval = 8) {
         guard let dir = directory else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
