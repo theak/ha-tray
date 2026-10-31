@@ -33,6 +33,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(s.defaultDashboardPath, "lovelace/0")
         XCTAssertEqual(s.panelWidth, 420)
         XCTAssertEqual(s.panelHeight, 700)
+        XCTAssertEqual(s.panelZoom, 1.0)
         XCTAssertEqual(s.rules, [])
         XCTAssertFalse(s.isConfigured)
     }
@@ -46,6 +47,7 @@ final class SettingsStoreTests: XCTestCase {
         s.rules = [rule]
         s.panelWidth = 500
         s.panelHeight = 800
+        s.panelZoom = 0.8
 
         let t = makeStore()
         XCTAssertEqual(t.baseURLString, "http://homeassistant.local:8123")
@@ -55,6 +57,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(t.rules, [rule])
         XCTAssertEqual(t.panelWidth, 500)
         XCTAssertEqual(t.panelHeight, 800)
+        XCTAssertEqual(t.panelZoom, 0.8)
         XCTAssertTrue(t.isConfigured)
     }
 

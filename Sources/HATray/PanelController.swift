@@ -75,6 +75,7 @@ final class PanelController: NSObject, NSPopoverDelegate {
 
     private func present(relativeTo button: NSStatusBarButton) {
         popover.contentSize = NSSize(width: settings.panelWidth, height: settings.panelHeight)
+        web.webView.pageZoom = settings.panelZoom
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()

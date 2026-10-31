@@ -63,6 +63,7 @@ struct SettingsView: View {
             Section("Panel") {
                 Stepper("Width: \(Int(settings.panelWidth))", value: $settings.panelWidth, in: 300...1200, step: 20)
                 Stepper("Height: \(Int(settings.panelHeight))", value: $settings.panelHeight, in: 300...1400, step: 20)
+                Stepper("Zoom: \(Int((settings.panelZoom * 100).rounded()))%", value: $settings.panelZoom, in: 0.5...1.5, step: 0.05)
             }
 
             Section("General") {

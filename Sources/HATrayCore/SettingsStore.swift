@@ -16,6 +16,8 @@ public final class SettingsStore: ObservableObject {
     @Published public var rules: [DashboardRule] { didSet { defaults.set(try? JSONEncoder().encode(rules), forKey: "rules") } }
     @Published public var panelWidth: Double { didSet { defaults.set(panelWidth, forKey: "panelWidth") } }
     @Published public var panelHeight: Double { didSet { defaults.set(panelHeight, forKey: "panelHeight") } }
+    /// Page zoom for the dashboard; below 1 fits more of it in the panel.
+    @Published public var panelZoom: Double { didSet { defaults.set(panelZoom, forKey: "panelZoom") } }
 
     public init(defaults: UserDefaults = .standard, tokens: TokenStore = KeychainTokenStore()) {
         self.defaults = defaults
@@ -32,6 +34,7 @@ public final class SettingsStore: ObservableObject {
         rules = defaults.data(forKey: "rules").flatMap { try? JSONDecoder().decode([DashboardRule].self, from: $0) } ?? []
         panelWidth = defaults.object(forKey: "panelWidth") as? Double ?? 420
         panelHeight = defaults.object(forKey: "panelHeight") as? Double ?? 700
+        panelZoom = defaults.object(forKey: "panelZoom") as? Double ?? 1.0
     }
 
     /// The token with any pasted whitespace removed.
